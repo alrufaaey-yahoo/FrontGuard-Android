@@ -10,7 +10,6 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -23,6 +22,12 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # لا تثبّت الحزمة القديمة "tools"؛ فهي غير متاحة في مستودع Android SDK.
+          packages: |
+            platform-tools
+            platforms;android-34
+            build-tools;34.0.0
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -38,7 +43,7 @@ jobs:
           name: FrontGuard-Debug-Universal-APK
           path: app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Upload Release Signed APK
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
           name: FrontGuard-Release-Universal-APK
