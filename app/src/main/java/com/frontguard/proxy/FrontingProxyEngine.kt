@@ -145,9 +145,6 @@ class FrontingProxyEngine(
         return ctx
     }
 
-    private fun relaySslContext(): SSLContext =
-        if (config.verifyRelayTls) SSLContext.getDefault() else relaxedClientSslContext
-
     private fun configureRelaxedTlsSocket(sslSocket: SSLSocket, sniHostname: String?) {
         // تفعيل كافة نسخ TLS المتاحة في الجهاز
         val supportedProtocols = sslSocket.supportedProtocols.filter {
@@ -513,10 +510,11 @@ class FrontingProxyEngine(
                 setRequestProperty("Accept", "application/json")
                 if (this is HttpsURLConnection) {
                     // Relay TLS is deliberately independent from Front TLS.
-                    // Verify Google certificates by default; only the Relay
-                    // switch may disable this for diagnosis.
-                    sslSocketFactory = relaySslContext().socketFactory
                     if (!config.verifyRelayTls) {
+                        // Only the explicit Relay diagnostic switch uses the
+                        // trust-all context. In verified mode Android's
+                        // platform HttpsURLConnection remains untouched.
+                        sslSocketFactory = relaxedClientSslContext.socketFactory
                         hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
                     }
                 }

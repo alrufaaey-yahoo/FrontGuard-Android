@@ -186,6 +186,7 @@ class MainActivity : AppCompatActivity() {
         switchVerifyRelayTls.isChecked = cfg.verifyRelayTls
         etGoogleRelayUrl.setText(cfg.googleRelayUrl)
         etGoogleRelayAuthKey.setText(cfg.googleRelayAuthKey)
+        updateRelayModeUi(cfg.googleRelayEnabled)
     }
 
     private fun readConfigFromUi(): ProxyConfig {
@@ -219,6 +220,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        switchGoogleRelay.setOnCheckedChangeListener { _, enabled ->
+            updateRelayModeUi(enabled)
+        }
         btnToggleProxy.setOnClickListener {
             if (ProxyForegroundService.isServiceRunning) {
                 val stopIntent = Intent(this, ProxyForegroundService::class.java).apply {
@@ -263,6 +267,15 @@ class MainActivity : AppCompatActivity() {
         btnShowLogs.setOnClickListener { showLogsDialog() }
     }
 
+    private fun updateRelayModeUi(relayEnabled: Boolean) {
+        // Independent Relay never reads Front/SNI settings. MITM remains
+        // enabled because HTTPS browser requests still need termination.
+        etFronts.isEnabled = !relayEnabled
+        etFrontPort.isEnabled = !relayEnabled
+        spinnerSniMode.isEnabled = !relayEnabled
+        switchInsecure.isEnabled = !relayEnabled
+    }
+
     private fun showLogsDialog() {
         val logView = TextView(this).apply {
             setPadding(18, 12, 18, 12)
@@ -277,7 +290,7 @@ class MainActivity : AppCompatActivity() {
             addView(logView)
         }
         AlertDialog.Builder(this)
-            .setTitle("سجل FrontGuard — الرفاعي alrufaaey")
+            .setTitle("سجل FrontGuard")
             .setView(scroll)
             .setNeutralButton("نسخ") { _, _ ->
                 val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -321,8 +334,10 @@ class MainActivity : AppCompatActivity() {
         etBlacklist.isEnabled = enabled
         etUserAgent.isEnabled = enabled
         switchGoogleRelay.isEnabled = enabled
+        switchVerifyRelayTls.isEnabled = enabled
         etGoogleRelayUrl.isEnabled = enabled
         etGoogleRelayAuthKey.isEnabled = enabled
+        if (enabled) updateRelayModeUi(switchGoogleRelay.isChecked)
     }
 
     private fun requestNotificationPermissionIfNeeded() {
