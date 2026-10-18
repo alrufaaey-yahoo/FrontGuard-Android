@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- درع الحماية والشبكة الأمامية -->
+    <path
+        android:fillColor="#0288D1"
+        android:pathData="M54,22L28,34v20c0,18.5 11.1,35.6 26,42c14.9,-6.4 26,-23.5 26,-42V34L54,22z" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M54,29L34,38.2v15.8c0,14.2 8.5,27.3 20,32.3V29z" />
+    <!-- أسهم التوجيه الأمامي Fronting Arrows -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,50h14v-6l10,10l-10,10v-6H44V50z" />
+</vector>
