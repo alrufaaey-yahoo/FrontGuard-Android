@@ -87,13 +87,13 @@ class FrontingProxyEngine(
                 onRunningChanged(true)
 
                 val fronts = config.frontList()
-                val transportMode = if (config.googleRelayEnabled) "apps_script_relay" else "front"
+                val transportMode = if (config.transportMode == ProxyConfig.MODE_RELAY) "apps_script_relay" else "front"
                 LogBus.log(
                     "بدء الاستماع ${config.listenHost}:${config.listenPort} | " +
-                            "transport=$transportMode | front_domain=${if (config.googleRelayEnabled) "ignored" else fronts.joinToString(",")} | " +
+                            "transport=$transportMode | front_domain=${if (config.transportMode == ProxyConfig.MODE_RELAY) "ignored" else fronts.joinToString(",")} | " +
                             "fronts=${fronts.size} | mitm=${config.mitm} | " +
                             "sni_mode=${config.sniMode} | insecure=${config.insecure} | " +
-                            "google_relay=${config.googleRelayEnabled}"
+                            "google_relay=${config.transportMode == ProxyConfig.MODE_RELAY}"
                 )
 
                 while (running.get()) {
@@ -698,7 +698,7 @@ class FrontingProxyEngine(
 
             if (method == "CONNECT") {
                 handleConnect(client, url)
-            } else if (config.googleRelayEnabled) {
+            } else if (config.transportMode == ProxyConfig.MODE_RELAY) {
                 try {
                     val request = readCompleteHttpRequest(client.getInputStream(), data)
                     val response = sendViaGoogleAppsScript(request, null, "http")
@@ -735,7 +735,7 @@ class FrontingProxyEngine(
             return
         }
 
-        if (config.googleRelayEnabled && (!config.mitm || targetPort != 443)) {
+        if (config.transportMode == ProxyConfig.MODE_RELAY && (!config.mitm || targetPort != 443)) {
             val reason = if (!config.mitm) {
                 "Google Apps Script relay requires MITM for HTTPS"
             } else {
@@ -796,7 +796,7 @@ class FrontingProxyEngine(
     }
 
     private fun mitmConnect(client: Socket, targetHost: String) {
-        if (isIpAddress(targetHost) && !config.googleRelayEnabled) {
+        if (isIpAddress(targetHost) && config.transportMode != ProxyConfig.MODE_RELAY) {
             try {
                 InetAddress.getByName(targetHost)
                 rawConnect(client, targetHost, 443)
@@ -830,7 +830,7 @@ class FrontingProxyEngine(
         }
 
         try {
-            if (config.googleRelayEnabled) {
+            if (config.transportMode == ProxyConfig.MODE_RELAY) {
                 try {
                     val request = readCompleteHttpRequest(browserTls.inputStream, byteArrayOf())
                     val response = sendViaGoogleAppsScript(request, targetHost, "https")

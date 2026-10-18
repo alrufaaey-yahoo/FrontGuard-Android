@@ -31,6 +31,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var tvStatusBadge: TextView
     private lateinit var btnToggleProxy: Button
+    private lateinit var btnStartFront: Button
+    private lateinit var btnStartRelay: Button
     private lateinit var btnExportCa: Button
     private lateinit var etListenHost: EditText
     private lateinit var etListenPort: EditText
@@ -133,6 +135,8 @@ class MainActivity : AppCompatActivity() {
     private fun bindViews() {
         tvStatusBadge = findViewById(R.id.tvStatusBadge)
         btnToggleProxy = findViewById(R.id.btnToggleProxy)
+        btnStartFront = findViewById(R.id.btnStartFront)
+        btnStartRelay = findViewById(R.id.btnStartRelay)
         btnExportCa = findViewById(R.id.btnExportCa)
         etListenHost = findViewById(R.id.etListenHost)
         etListenPort = findViewById(R.id.etListenPort)
@@ -182,14 +186,14 @@ class MainActivity : AppCompatActivity() {
         etAuth.setText(cfg.auth)
         etBlacklist.setText(cfg.blacklist)
         etUserAgent.setText(cfg.userAgent)
-        switchGoogleRelay.isChecked = cfg.googleRelayEnabled
+        switchGoogleRelay.isChecked = cfg.transportMode == ProxyConfig.MODE_RELAY
         switchVerifyRelayTls.isChecked = cfg.verifyRelayTls
         etGoogleRelayUrl.setText(cfg.googleRelayUrl)
         etGoogleRelayAuthKey.setText(cfg.googleRelayAuthKey)
-        updateRelayModeUi(cfg.googleRelayEnabled)
+        updateRelayModeUi(cfg.transportMode == ProxyConfig.MODE_RELAY)
     }
 
-    private fun readConfigFromUi(): ProxyConfig {
+    private fun readConfigFromUi(mode: String): ProxyConfig {
         val host = etListenHost.text.toString().trim().ifEmpty { "0.0.0.0" }
         val port = etListenPort.text.toString().toIntOrNull()?.coerceIn(1, 65535) ?: 8080
         val fronts = etFronts.text.toString().trim().ifEmpty { "google.com" }
@@ -199,6 +203,7 @@ class MainActivity : AppCompatActivity() {
         val retry = etRetry.text.toString().toIntOrNull()?.coerceIn(1, 10) ?: 2
 
         return ProxyConfig(
+            transportMode = mode,
             listenHost = host,
             listenPort = port,
             fronts = fronts,
@@ -212,7 +217,7 @@ class MainActivity : AppCompatActivity() {
             auth = etAuth.text.toString().trim(),
             blacklist = etBlacklist.text.toString().trim(),
             userAgent = etUserAgent.text.toString().trim(),
-            googleRelayEnabled = switchGoogleRelay.isChecked,
+            googleRelayEnabled = mode == ProxyConfig.MODE_RELAY,
             googleRelayUrl = etGoogleRelayUrl.text.toString().trim(),
             googleRelayAuthKey = etGoogleRelayAuthKey.text.toString(),
             verifyRelayTls = switchVerifyRelayTls.isChecked
@@ -223,29 +228,14 @@ class MainActivity : AppCompatActivity() {
         switchGoogleRelay.setOnCheckedChangeListener { _, enabled ->
             updateRelayModeUi(enabled)
         }
+        btnStartFront.setOnClickListener { startMode(ProxyConfig.MODE_FRONT) }
+        btnStartRelay.setOnClickListener { startMode(ProxyConfig.MODE_RELAY) }
         btnToggleProxy.setOnClickListener {
             if (ProxyForegroundService.isServiceRunning) {
                 val stopIntent = Intent(this, ProxyForegroundService::class.java).apply {
                     action = ProxyForegroundService.ACTION_STOP
                 }
                 startService(stopIntent)
-                updateServiceUiState()
-            } else {
-                val cfg = readConfigFromUi()
-                val validationError = cfg.validate()
-                if (validationError != null) {
-                    Toast.makeText(
-                        this,
-                        validationError,
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@setOnClickListener
-                }
-                ProxyConfig.save(this, cfg)
-                val startIntent = Intent(this, ProxyForegroundService::class.java).apply {
-                    action = ProxyForegroundService.ACTION_START
-                }
-                ContextCompat.startForegroundService(this, startIntent)
                 updateServiceUiState()
             }
         }
@@ -265,6 +255,22 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "تم نسخ السجل إلى الحافظة", Toast.LENGTH_SHORT).show()
         }
         btnShowLogs.setOnClickListener { showLogsDialog() }
+    }
+
+    private fun startMode(mode: String) {
+        if (ProxyForegroundService.isServiceRunning) return
+        val cfg = readConfigFromUi(mode)
+        val validationError = cfg.validate()
+        if (validationError != null) {
+            Toast.makeText(this, validationError, Toast.LENGTH_LONG).show()
+            return
+        }
+        ProxyConfig.save(this, cfg)
+        val startIntent = Intent(this, ProxyForegroundService::class.java).apply {
+            action = ProxyForegroundService.ACTION_START
+        }
+        ContextCompat.startForegroundService(this, startIntent)
+        updateServiceUiState()
     }
 
     private fun updateRelayModeUi(relayEnabled: Boolean) {
@@ -305,16 +311,23 @@ class MainActivity : AppCompatActivity() {
         val running = ProxyForegroundService.isServiceRunning
         if (running) {
             val cfg = ProxyConfig.load(this)
-            tvStatusBadge.text = "متصل ويعمل في الخلفية (${cfg.listenHost}:${cfg.listenPort})"
+            val mode = if (cfg.transportMode == ProxyConfig.MODE_RELAY) "Relay" else "Front"
+            tvStatusBadge.text = "${mode} يعمل في الخلفية (${cfg.listenHost}:${cfg.listenPort})"
             tvStatusBadge.setBackgroundColor(0xFF1B5E20.toInt())
             btnToggleProxy.text = "إيقاف البروكسي (STOP)"
             btnToggleProxy.setBackgroundColor(0xFFC62828.toInt())
+            btnToggleProxy.isEnabled = true
+            btnStartFront.isEnabled = false
+            btnStartRelay.isEnabled = false
             setInputsEnabled(false)
         } else {
             tvStatusBadge.text = "متوقف حالياً"
             tvStatusBadge.setBackgroundColor(0xFF37474F.toInt())
-            btnToggleProxy.text = "تشغيل البروكسي (START)"
-            btnToggleProxy.setBackgroundColor(0xFF0277BD.toInt())
+            btnToggleProxy.text = "لا يوجد مسار يعمل — اختر Front أو Relay"
+            btnToggleProxy.setBackgroundColor(0xFF455A64.toInt())
+            btnToggleProxy.isEnabled = false
+            btnStartFront.isEnabled = true
+            btnStartRelay.isEnabled = true
             setInputsEnabled(true)
         }
     }
@@ -337,6 +350,8 @@ class MainActivity : AppCompatActivity() {
         switchVerifyRelayTls.isEnabled = enabled
         etGoogleRelayUrl.isEnabled = enabled
         etGoogleRelayAuthKey.isEnabled = enabled
+        btnStartFront.isEnabled = enabled
+        btnStartRelay.isEnabled = enabled
         if (enabled) updateRelayModeUi(switchGoogleRelay.isChecked)
     }
 
