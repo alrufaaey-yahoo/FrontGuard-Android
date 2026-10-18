@@ -42,7 +42,8 @@ import kotlin.random.Random
 class FrontingProxyEngine(
     private val config: ProxyConfig,
     private val filesDir: File,
-    private val onStatsChanged: (Int) -> Unit = {}
+    private val onStatsChanged: (Int) -> Unit = {},
+    private val onRunningChanged: (Boolean) -> Unit = {}
 ) {
     companion object {
         private const val BUFFER_SIZE = 65536
@@ -83,6 +84,7 @@ class FrontingProxyEngine(
                 srv.reuseAddress = true
                 srv.bind(InetSocketAddress(config.listenHost, config.listenPort), 256)
                 serverSocket = srv
+                onRunningChanged(true)
 
                 val fronts = config.frontList()
                 LogBus.log(
@@ -115,6 +117,7 @@ class FrontingProxyEngine(
                 }
             } catch (e: Exception) {
                 LogBus.log("فشل تشغيل الخادم: ${e.message}", "ERR")
+                onRunningChanged(false)
                 stop()
             }
         }
@@ -127,6 +130,7 @@ class FrontingProxyEngine(
         } catch (_: Exception) {
         }
         serverSocket = null
+        onRunningChanged(false)
         LogBus.log("تم إيقاف البروكسي")
     }
 

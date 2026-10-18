@@ -16,7 +16,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="FrontGuard Proxy"
+            android:text="FrontGuard Proxy — الرفاعي alrufaaey"
             android:textColor="@color/text_primary"
             android:textSize="22sp"
             android:textStyle="bold" />
@@ -25,7 +25,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:text="CF/Google Fronting Proxy — متوافق مع OpenSSL 3.x (SKI/AKI)"
+            android:text="واجهة مبسطة لـ Front وGoogle Apps Script Relay — تصميم الرفاعي alrufaaey"
             android:textColor="@color/text_secondary"
             android:textSize="13sp" />
 
@@ -66,6 +66,15 @@
                 android:text="تصدير CA"
                 android:textColor="#FFFFFF" />
         </LinearLayout>
+
+        <Button
+            android:id="@+id/btnShowLogs"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="#334155"
+            android:text="عرض سجل العمليات"
+            android:textColor="#FFFFFF" />
 
         <!-- بطاقة الإعدادات الأساسية -->
         <LinearLayout
@@ -248,7 +257,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Google Apps Script Relay (اختياري)"
+                android:text="Google Apps Script Relay — وضع مستقل"
                 android:textColor="#38BDF8"
                 android:textStyle="bold" />
 
@@ -264,7 +273,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="مستقل عن Fronts. يلزم MITM وشهادة CA لـ HTTPS؛ WebSocket والتطبيقات ذات تثبيت الشهادة قد لا تعمل. حركة التصفح وملفات الارتباط تمر عبر السكربت، وتظل خاضعة لحصص Google وحدود الحجم."
+                android:text="مسار مستقل عن Fronts: Host الهدف يؤخذ من طلب المستخدم، بينما SNI/Front يستخدمان فقط لمسار Front. يلزم MITM وتثبيت CA لـ HTTPS؛ WebSocket والتطبيقات ذات تثبيت الشهادة غير مدعومة."
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
@@ -389,6 +398,7 @@
 
         <!-- شاشة السجل المباشر -->
         <LinearLayout
+            android:id="@+id/logsPanel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"

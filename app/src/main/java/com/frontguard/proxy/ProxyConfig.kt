@@ -28,6 +28,17 @@ data class ProxyConfig(
     fun blacklistSet(): Set<String> =
         blacklist.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
 
+    fun validate(): String? {
+        if (listenPort !in 1..65535) return "منفذ الاستماع غير صحيح"
+        if (frontPort !in 1..65535) return "منفذ Front غير صحيح"
+        if (googleRelayEnabled) {
+            if (!googleRelayUrl.startsWith("https://")) return "رابط Apps Script يجب أن يبدأ بـ https://"
+            if (googleRelayAuthKey.isBlank()) return "أدخل AUTH_KEY المطابق لـ Code.gs"
+            if (!mitm) return "فعّل MITM لكي يعمل Relay مع HTTPS؛ HTTP سيظل يعمل بدونه"
+        }
+        return null
+    }
+
     companion object {
         private const val PREFS_NAME = "frontguard_prefs"
 

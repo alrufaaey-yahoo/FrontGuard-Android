@@ -1,6 +1,7 @@
 package com.frontguard.proxy
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -51,6 +52,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var scrollLogs: ScrollView
     private lateinit var btnClearLogs: Button
     private lateinit var btnCopyLogs: Button
+    private lateinit var btnShowLogs: Button
+    private lateinit var logsPanel: View
 
     private val sniModes = arrayOf("front", "target", "auto")
 
@@ -89,6 +92,7 @@ class MainActivity : AppCompatActivity() {
 
         requestNotificationPermissionIfNeeded()
         bindViews()
+        logsPanel.visibility = View.GONE
         loadConfigIntoUi()
         setupListeners()
 
@@ -149,6 +153,8 @@ class MainActivity : AppCompatActivity() {
         scrollLogs = findViewById(R.id.scrollLogs)
         btnClearLogs = findViewById(R.id.btnClearLogs)
         btnCopyLogs = findViewById(R.id.btnCopyLogs)
+        btnShowLogs = findViewById(R.id.btnShowLogs)
+        logsPanel = findViewById(R.id.logsPanel)
 
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, sniModes)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -215,12 +221,14 @@ class MainActivity : AppCompatActivity() {
                     action = ProxyForegroundService.ACTION_STOP
                 }
                 startService(stopIntent)
+                updateServiceUiState()
             } else {
                 val cfg = readConfigFromUi()
-                if (cfg.googleRelayEnabled && cfg.googleRelayAuthKey.isBlank()) {
+                val validationError = cfg.validate()
+                if (validationError != null) {
                     Toast.makeText(
                         this,
-                        "أدخل AUTH_KEY المطابق للقيمة في Code.gs قبل تشغيل Google relay",
+                        validationError,
                         Toast.LENGTH_LONG
                     ).show()
                     return@setOnClickListener
@@ -230,6 +238,7 @@ class MainActivity : AppCompatActivity() {
                     action = ProxyForegroundService.ACTION_START
                 }
                 ContextCompat.startForegroundService(this, startIntent)
+                updateServiceUiState()
             }
         }
 
@@ -247,6 +256,32 @@ class MainActivity : AppCompatActivity() {
             cm.setPrimaryClip(ClipData.newPlainText("FrontGuard Logs", tvLogs.text.toString()))
             Toast.makeText(this, "تم نسخ السجل إلى الحافظة", Toast.LENGTH_SHORT).show()
         }
+        btnShowLogs.setOnClickListener { showLogsDialog() }
+    }
+
+    private fun showLogsDialog() {
+        val logView = TextView(this).apply {
+            setPadding(18, 12, 18, 12)
+            textSize = 11f
+            typeface = android.graphics.Typeface.MONOSPACE
+            textDirection = View.TEXT_DIRECTION_LTR
+            setTextColor(0xFF10B981.toInt())
+            text = LogBus.getHistory().joinToString("\n").ifBlank { "لا توجد سجلات بعد" }
+        }
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(0xFF090D16.toInt())
+            addView(logView)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("سجل FrontGuard — الرفاعي alrufaaey")
+            .setView(scroll)
+            .setNeutralButton("نسخ") { _, _ ->
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("FrontGuard Logs", logView.text.toString()))
+            }
+            .setNegativeButton("مسح") { _, _ -> LogBus.clear(); tvLogs.text = "" }
+            .setPositiveButton("إغلاق", null)
+            .show()
     }
 
     private fun updateServiceUiState() {

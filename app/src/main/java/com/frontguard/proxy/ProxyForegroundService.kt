@@ -51,21 +51,42 @@ class ProxyForegroundService : Service() {
         createNotificationChannel()
         val config = ProxyConfig.load(this)
 
+        config.validate()?.let {
+            LogBus.log(it, "ERR")
+            isServiceRunning = false
+            sendStatusBroadcast(false)
+            stopSelf()
+            return
+        }
+
         acquireWakeLock()
 
         val notification = buildNotification(config, 0)
         startForeground(NOTIF_ID, notification)
 
         currentEngine?.stop()
-        val engine = FrontingProxyEngine(config, filesDir) { activeCount ->
-            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            nm.notify(NOTIF_ID, buildNotification(config, activeCount))
-        }
+        val engine = FrontingProxyEngine(
+            config,
+            filesDir,
+            onStatsChanged = { activeCount ->
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.notify(NOTIF_ID, buildNotification(config, activeCount))
+            },
+            onRunningChanged = { running ->
+                isServiceRunning = running
+                sendStatusBroadcast(running)
+                if (!running) {
+                    releaseWakeLock()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+            }
+        )
         currentEngine = engine
         engine.start()
 
         isServiceRunning = true
-        sendBroadcast(Intent(ACTION_STATUS_BROADCAST))
+        sendStatusBroadcast(true)
     }
 
     private fun stopProxyService() {
@@ -73,7 +94,7 @@ class ProxyForegroundService : Service() {
         currentEngine = null
         isServiceRunning = false
         releaseWakeLock()
-        sendBroadcast(Intent(ACTION_STATUS_BROADCAST))
+        sendStatusBroadcast(false)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -83,8 +104,16 @@ class ProxyForegroundService : Service() {
         currentEngine = null
         isServiceRunning = false
         releaseWakeLock()
-        sendBroadcast(Intent(ACTION_STATUS_BROADCAST))
+        sendStatusBroadcast(false)
         super.onDestroy()
+    }
+
+    private fun sendStatusBroadcast(running: Boolean) {
+        sendBroadcast(
+            Intent(ACTION_STATUS_BROADCAST)
+                .setPackage(packageName)
+                .putExtra("running", running)
+        )
     }
 
     private fun acquireWakeLock() {

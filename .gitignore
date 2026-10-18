@@ -1,0 +1,6 @@
+
+# Local Android SDK
+local.properties
+.gradle/
+build/
+app/build/
