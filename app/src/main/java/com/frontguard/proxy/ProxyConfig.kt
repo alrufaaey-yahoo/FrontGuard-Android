@@ -25,11 +25,6 @@ data class ProxyConfig(
     val googleRelayAuthKey: String = DEFAULT_GOOGLE_RELAY_AUTH_KEY,
     val verifyRelayTls: Boolean = true
 ) {
-    companion object {
-        const val MODE_FRONT = "front"
-        const val MODE_RELAY = "relay"
-    }
-
     fun frontList(): List<String> =
         fronts.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -52,6 +47,8 @@ data class ProxyConfig(
     }
 
     companion object {
+        const val MODE_FRONT = "front"
+        const val MODE_RELAY = "relay"
         private const val PREFS_NAME = "frontguard_prefs"
 
         fun load(context: Context): ProxyConfig {
