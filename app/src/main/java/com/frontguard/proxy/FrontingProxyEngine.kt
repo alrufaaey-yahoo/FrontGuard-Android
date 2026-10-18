@@ -87,8 +87,10 @@ class FrontingProxyEngine(
                 onRunningChanged(true)
 
                 val fronts = config.frontList()
+                val transportMode = if (config.googleRelayEnabled) "apps_script_relay" else "front"
                 LogBus.log(
                     "بدء الاستماع ${config.listenHost}:${config.listenPort} | " +
+                            "transport=$transportMode | front_domain=${if (config.googleRelayEnabled) "ignored" else fronts.joinToString(",")} | " +
                             "fronts=${fronts.size} | mitm=${config.mitm} | " +
                             "sni_mode=${config.sniMode} | insecure=${config.insecure} | " +
                             "google_relay=${config.googleRelayEnabled}"

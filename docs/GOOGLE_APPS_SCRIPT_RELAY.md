@@ -2,6 +2,8 @@
 
 ميزة **Google Apps Script Relay** مسار مستقل تمامًا عن Front/SNI: يتصل التطبيق بـ`script.google.com` عبر HTTPS عادي ويتابع redirect إلى `googleusercontent.com`. لا يستخدم Relay قائمة `Fronts` ولا شهادة MITM للوصول إلى Google. أما `Fronts` و`SNI mode` وشهادة MITM فتُستخدم فقط عندما يعمل مسار Front التقليدي.
 
+في mhrv-rs يقابل `front_domain` اسم الـFront/SNI المستخدم في مسار Google edge، بينما يقابل رابط `/exec` و`auth_key` إعداد Apps Script Relay. في FrontGuard يتم اختيار النقل ديناميكيًا: عند إيقاف Relay يكون `front_domain` هو قيمة `Fronts` المختارة ويُستخدم `SNI mode` معها؛ عند تفعيل Relay يصبح `front_domain` متجاهلًا ويُستخدم رابط Apps Script ومفتاحه فقط. يسجل التطبيق ذلك بوضوح في السجل باسم `transport=front` أو `transport=apps_script_relay`.
+
 ## النشر
 
 1. افتح Google Apps Script وأنشئ مشروعًا جديدًا.
