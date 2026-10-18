@@ -53,8 +53,7 @@ class MainActivity : AppCompatActivity() {
 
     private val logListener: (String) -> Unit = { line ->
         runOnUiThread {
-            tvLogs.append(line + "
-")
+            tvLogs.append(line + "\n")
             scrollLogs.post { scrollLogs.fullScroll(View.FOCUS_DOWN) }
         }
     }
@@ -93,9 +92,7 @@ class MainActivity : AppCompatActivity() {
         // عرض السجلات السابقة
         val history = LogBus.getHistory()
         if (history.isNotEmpty()) {
-            tvLogs.text = history.joinToString("
-") + "
-"
+            tvLogs.text = history.joinToString("\n") + "\n"
             scrollLogs.post { scrollLogs.fullScroll(View.FOCUS_DOWN) }
         }
         LogBus.register(logListener)

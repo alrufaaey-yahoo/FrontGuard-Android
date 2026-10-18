@@ -254,8 +254,7 @@ class FrontingProxyEngine(
         val expected = config.auth.trim()
         if (expected.isEmpty()) return true
         val headerStr = String(requestBytes, Charsets.ISO_8859_1)
-        for (line in headerStr.split("
-")) {
+        for (line in headerStr.split("\r\n")) {
             if (line.lowercase().startsWith("proxy-authorization:")) {
                 val value = line.substringAfter(":").trim()
                 return value == expected || value == "Basic $expected"
@@ -266,14 +265,11 @@ class FrontingProxyEngine(
 
     private fun rewriteRequest(requestBytes: ByteArray, targetHost: String): ByteArray {
         val rawStr = String(requestBytes, Charsets.ISO_8859_1)
-        val sepIndex = rawStr.indexOf("
-
-")
+        val sepIndex = rawStr.indexOf("\r\n\r\n")
         val headerPart = if (sepIndex >= 0) rawStr.substring(0, sepIndex) else rawStr
         val bodyOffset = if (sepIndex >= 0) sepIndex + 4 else requestBytes.size
 
-        val lines = headerPart.split("
-")
+        val lines = headerPart.split("\r\n")
         if (lines.isEmpty()) return requestBytes
 
         val outLines = mutableListOf<String>()
@@ -302,10 +298,7 @@ class FrontingProxyEngine(
             outLines.add(1, "Host: $targetHost")
         }
 
-        val rebuiltHeaders = (outLines.joinToString("
-") + "
-
-").toByteArray(Charsets.ISO_8859_1)
+        val rebuiltHeaders = (outLines.joinToString("\r\n") + "\r\n\r\n").toByteArray(Charsets.ISO_8859_1)
         val out = ByteArrayOutputStream(rebuiltHeaders.size + (requestBytes.size - bodyOffset))
         out.write(rebuiltHeaders)
         if (bodyOffset < requestBytes.size) {
@@ -334,20 +327,15 @@ class FrontingProxyEngine(
             }
 
             if (!checkAuth(data)) {
-                val resp = "HTTP/1.1 407 Proxy Authentication Required
-" +
-                        "Proxy-Authenticate: Basic realm="proxy"
-" +
-                        "Content-Length: 0
-
-"
+                val resp = "HTTP/1.1 407 Proxy Authentication Required\r\n" +
+                        "Proxy-Authenticate: Basic realm=\"proxy\"\r\n" +
+                        "Content-Length: 0\r\n\r\n"
                 client.getOutputStream().write(resp.toByteArray(Charsets.ISO_8859_1))
                 client.close()
                 return
             }
 
-            val firstLine = String(data, Charsets.ISO_8859_1).substringBefore("
-")
+            val firstLine = String(data, Charsets.ISO_8859_1).substringBefore("\r\n")
             val parts = firstLine.split(" ")
             if (parts.size < 2) {
                 client.close()
@@ -377,10 +365,7 @@ class FrontingProxyEngine(
 
         if (isBlocked(targetHost)) {
             client.getOutputStream().write(
-                "HTTP/1.1 403 Forbidden
-Content-Length: 0
-
-".toByteArray(Charsets.ISO_8859_1)
+                "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
             )
             client.close()
             return
@@ -407,9 +392,7 @@ Content-Length: 0
                 upstream.connect(InetSocketAddress(front, config.frontPort), timeoutMs)
 
                 client.getOutputStream().write(
-                    "HTTP/1.1 200 Connection Established
-
-".toByteArray(Charsets.ISO_8859_1)
+                    "HTTP/1.1 200 Connection Established\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
                 )
                 if (config.verbose) {
                     LogBus.log("CONNECT $targetHost:$targetPort -> raw via $front")
@@ -425,10 +408,7 @@ Content-Length: 0
 
         try {
             client.getOutputStream().write(
-                "HTTP/1.1 502 Bad Gateway
-Content-Length: 0
-
-".toByteArray(Charsets.ISO_8859_1)
+                "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
             )
             client.close()
         } catch (_: Exception) {
@@ -436,7 +416,7 @@ Content-Length: 0
     }
 
     private fun isIpAddress(host: String): Boolean {
-        val ipv4Regex = Regex("^\d{1,3}(\.\d{1,3}){3}$")
+        val ipv4Regex = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
         return ipv4Regex.matches(host) || host.contains(":")
     }
 
@@ -451,9 +431,7 @@ Content-Length: 0
         }
 
         client.getOutputStream().write(
-            "HTTP/1.1 200 Connection Established
-
-".toByteArray(Charsets.ISO_8859_1)
+            "HTTP/1.1 200 Connection Established\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
         )
 
         val browserTls: SSLSocket = try {
@@ -483,8 +461,7 @@ Content-Length: 0
                 return
             }
 
-            val firstLine = String(req, Charsets.ISO_8859_1).substringBefore("
-")
+            val firstLine = String(req, Charsets.ISO_8859_1).substringBefore("\r\n")
             val method = firstLine.substringBefore(" ").ifEmpty { "GET" }
             val rebuilt = rewriteRequest(req, targetHost)
 
@@ -508,10 +485,7 @@ Content-Length: 0
 
             try {
                 browserTls.outputStream.write(
-                    "HTTP/1.1 502 Bad Gateway
-Content-Length: 0
-
-".toByteArray(Charsets.ISO_8859_1)
+                    "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
                 )
             } catch (_: Exception) {
             }
@@ -531,14 +505,10 @@ Content-Length: 0
             val rawPath = uri.rawPath?.ifEmpty { "/" } ?: "/"
             path = if (uri.rawQuery != null) "$rawPath?${uri.rawQuery}" else rawPath
         } else {
-            val hostLine = rawStr.split("
-").firstOrNull { it.lowercase().startsWith("host:") }
+            val hostLine = rawStr.split("\r\n").firstOrNull { it.lowercase().startsWith("host:") }
             if (hostLine == null) {
                 client.getOutputStream().write(
-                    "HTTP/1.1 400 Bad Request
-Content-Length: 0
-
-".toByteArray(Charsets.ISO_8859_1)
+                    "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
                 )
                 client.close()
                 return
@@ -549,23 +519,17 @@ Content-Length: 0
 
         if (isBlocked(targetHost)) {
             client.getOutputStream().write(
-                "HTTP/1.1 403 Forbidden
-Content-Length: 0
-
-".toByteArray(Charsets.ISO_8859_1)
+                "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
             )
             client.close()
             return
         }
 
-        val firstCrlf = rawStr.indexOf("
-")
+        val firstCrlf = rawStr.indexOf("\r\n")
         val restBytes = if (firstCrlf >= 0) {
             data.copyOfRange(firstCrlf, data.size)
         } else {
-            "
-
-".toByteArray(Charsets.ISO_8859_1)
+            "\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
         }
 
         val firstLineBytes = "$method $path HTTP/1.1".toByteArray(Charsets.ISO_8859_1)
@@ -595,10 +559,7 @@ Content-Length: 0
 
         try {
             client.getOutputStream().write(
-                "HTTP/1.1 502 Bad Gateway
-Content-Length: 0
-
-".toByteArray(Charsets.ISO_8859_1)
+                "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
             )
             client.close()
         } catch (_: Exception) {
@@ -645,6 +606,6 @@ Content-Length: 0
     }
 
     private fun closeQuietly(s: Socket) {
-        try { s. close() } catch (_: Exception) {}
+        try { s.close() } catch (_: Exception) {}
     }
 }
