@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etBlacklist: EditText
     private lateinit var etUserAgent: EditText
     private lateinit var switchGoogleRelay: MaterialSwitch
+    private lateinit var switchVerifyRelayTls: MaterialSwitch
     private lateinit var etGoogleRelayUrl: EditText
     private lateinit var etGoogleRelayAuthKey: EditText
     private lateinit var tvLogs: TextView
@@ -147,6 +148,7 @@ class MainActivity : AppCompatActivity() {
         etBlacklist = findViewById(R.id.etBlacklist)
         etUserAgent = findViewById(R.id.etUserAgent)
         switchGoogleRelay = findViewById(R.id.switchGoogleRelay)
+        switchVerifyRelayTls = findViewById(R.id.switchVerifyRelayTls)
         etGoogleRelayUrl = findViewById(R.id.etGoogleRelayUrl)
         etGoogleRelayAuthKey = findViewById(R.id.etGoogleRelayAuthKey)
         tvLogs = findViewById(R.id.tvLogs)
@@ -181,6 +183,7 @@ class MainActivity : AppCompatActivity() {
         etBlacklist.setText(cfg.blacklist)
         etUserAgent.setText(cfg.userAgent)
         switchGoogleRelay.isChecked = cfg.googleRelayEnabled
+        switchVerifyRelayTls.isChecked = cfg.verifyRelayTls
         etGoogleRelayUrl.setText(cfg.googleRelayUrl)
         etGoogleRelayAuthKey.setText(cfg.googleRelayAuthKey)
     }
@@ -210,7 +213,8 @@ class MainActivity : AppCompatActivity() {
             userAgent = etUserAgent.text.toString().trim(),
             googleRelayEnabled = switchGoogleRelay.isChecked,
             googleRelayUrl = etGoogleRelayUrl.text.toString().trim(),
-            googleRelayAuthKey = etGoogleRelayAuthKey.text.toString()
+            googleRelayAuthKey = etGoogleRelayAuthKey.text.toString(),
+            verifyRelayTls = switchVerifyRelayTls.isChecked
         )
     }
 

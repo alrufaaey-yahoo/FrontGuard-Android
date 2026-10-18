@@ -13,6 +13,7 @@ import java.io.InputStream
 import java.io.SequenceInputStream
 import java.io.OutputStream
 import java.net.HttpURLConnection
+import javax.net.ssl.HttpsURLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -58,7 +59,6 @@ class FrontingProxyEngine(
         val headers: LinkedHashMap<String, String>,
         val body: ByteArray
     )
-
     private val running = AtomicBoolean(false)
     private val activeConnections = AtomicInteger(0)
     private var serverSocket: ServerSocket? = null
@@ -144,6 +144,9 @@ class FrontingProxyEngine(
         ctx.init(null, trustAll, SecureRandom())
         return ctx
     }
+
+    private fun relaySslContext(): SSLContext =
+        if (config.verifyRelayTls) SSLContext.getDefault() else relaxedClientSslContext
 
     private fun configureRelaxedTlsSocket(sslSocket: SSLSocket, sniHostname: String?) {
         // تفعيل كافة نسخ TLS المتاحة في الجهاز
@@ -508,6 +511,15 @@ class FrontingProxyEngine(
                 instanceFollowRedirects = false
                 useCaches = false
                 setRequestProperty("Accept", "application/json")
+                if (this is HttpsURLConnection) {
+                    // Relay TLS is deliberately independent from Front TLS.
+                    // Verify Google certificates by default; only the Relay
+                    // switch may disable this for diagnosis.
+                    sslSocketFactory = relaySslContext().socketFactory
+                    if (!config.verifyRelayTls) {
+                        hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+                    }
+                }
                 if (method == "POST") {
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json; charset=utf-8")

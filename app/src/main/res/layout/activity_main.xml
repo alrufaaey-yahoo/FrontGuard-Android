@@ -285,7 +285,7 @@
                 android:hint="رابط نشر Apps Script /exec"
                 android:inputType="textUri"
                 android:singleLine="true"
-                android:text="https://script.google.com/macros/s/AKfycbx9Df5lbZ0Zctj8JTG-uZ7QS_deZwpG1143vB89rgFM0qlv2hJuPE7h3MeomPbRMzAqhQ/exec"
+                android:text="https://script.google.com/macros/s/AKfycbx-WPwe3qUZozQJxzDEF2DRs3hYiIGMcmoeTjS2hC_7CKcTbXBm2cbxV4KKuryypp5NwQ/exec"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_secondary" />
 
@@ -298,6 +298,21 @@
                 android:singleLine="true"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_secondary" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switchVerifyRelayTls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="Verify upstream TLS — تحقق من شهادة Google للـRelay"
+                android:textColor="@color/text_primary" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="هذا الخيار خاص باتصال Relay فقط ولا يغيّر Front أو شهادة MITM. أوقفه للتشخيص فقط."
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <!-- بطاقة الخيارات المتقدمة -->
