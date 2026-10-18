@@ -2,6 +2,8 @@ package com.frontguard.proxy
 
 import android.content.Context
 
+private const val DEFAULT_GOOGLE_RELAY_URL = "https://script.google.com/macros/s/AKfycbx9Df5lbZ0Zctj8JTG-uZ7QS_deZwpG1143vB89rgFM0qlv2hJuPE7h3MeomPbRMzAqhQ/exec"
+
 data class ProxyConfig(
     val listenHost: String = "0.0.0.0",
     val listenPort: Int = 8080,
@@ -15,7 +17,10 @@ data class ProxyConfig(
     val retryCount: Int = 2,
     val auth: String = "",
     val blacklist: String = "",
-    val userAgent: String = ""
+    val userAgent: String = "",
+    val googleRelayEnabled: Boolean = false,
+    val googleRelayUrl: String = DEFAULT_GOOGLE_RELAY_URL,
+    val googleRelayAuthKey: String = ""
 ) {
     fun frontList(): List<String> =
         fronts.split(",").map { it.trim() }.filter { it.isNotEmpty() }
@@ -41,7 +46,11 @@ data class ProxyConfig(
                 retryCount = sp.getInt("retryCount", 2),
                 auth = sp.getString("auth", "") ?: "",
                 blacklist = sp.getString("blacklist", "") ?: "",
-                userAgent = sp.getString("userAgent", "") ?: ""
+                userAgent = sp.getString("userAgent", "") ?: "",
+                googleRelayEnabled = sp.getBoolean("googleRelayEnabled", false),
+                googleRelayUrl = sp.getString("googleRelayUrl", DEFAULT_GOOGLE_RELAY_URL)
+                    ?: DEFAULT_GOOGLE_RELAY_URL,
+                googleRelayAuthKey = sp.getString("googleRelayAuthKey", "") ?: ""
             )
         }
 
@@ -60,6 +69,9 @@ data class ProxyConfig(
                 putString("auth", cfg.auth)
                 putString("blacklist", cfg.blacklist)
                 putString("userAgent", cfg.userAgent)
+                putBoolean("googleRelayEnabled", cfg.googleRelayEnabled)
+                putString("googleRelayUrl", cfg.googleRelayUrl)
+                putString("googleRelayAuthKey", cfg.googleRelayAuthKey)
                 apply()
             }
         }

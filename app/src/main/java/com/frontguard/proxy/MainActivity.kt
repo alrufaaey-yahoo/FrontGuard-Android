@@ -44,6 +44,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etAuth: EditText
     private lateinit var etBlacklist: EditText
     private lateinit var etUserAgent: EditText
+    private lateinit var switchGoogleRelay: MaterialSwitch
+    private lateinit var etGoogleRelayUrl: EditText
+    private lateinit var etGoogleRelayAuthKey: EditText
     private lateinit var tvLogs: TextView
     private lateinit var scrollLogs: ScrollView
     private lateinit var btnClearLogs: Button
@@ -139,6 +142,9 @@ class MainActivity : AppCompatActivity() {
         etAuth = findViewById(R.id.etAuth)
         etBlacklist = findViewById(R.id.etBlacklist)
         etUserAgent = findViewById(R.id.etUserAgent)
+        switchGoogleRelay = findViewById(R.id.switchGoogleRelay)
+        etGoogleRelayUrl = findViewById(R.id.etGoogleRelayUrl)
+        etGoogleRelayAuthKey = findViewById(R.id.etGoogleRelayAuthKey)
         tvLogs = findViewById(R.id.tvLogs)
         scrollLogs = findViewById(R.id.scrollLogs)
         btnClearLogs = findViewById(R.id.btnClearLogs)
@@ -168,6 +174,9 @@ class MainActivity : AppCompatActivity() {
         etAuth.setText(cfg.auth)
         etBlacklist.setText(cfg.blacklist)
         etUserAgent.setText(cfg.userAgent)
+        switchGoogleRelay.isChecked = cfg.googleRelayEnabled
+        etGoogleRelayUrl.setText(cfg.googleRelayUrl)
+        etGoogleRelayAuthKey.setText(cfg.googleRelayAuthKey)
     }
 
     private fun readConfigFromUi(): ProxyConfig {
@@ -192,7 +201,10 @@ class MainActivity : AppCompatActivity() {
             retryCount = retry,
             auth = etAuth.text.toString().trim(),
             blacklist = etBlacklist.text.toString().trim(),
-            userAgent = etUserAgent.text.toString().trim()
+            userAgent = etUserAgent.text.toString().trim(),
+            googleRelayEnabled = switchGoogleRelay.isChecked,
+            googleRelayUrl = etGoogleRelayUrl.text.toString().trim(),
+            googleRelayAuthKey = etGoogleRelayAuthKey.text.toString()
         )
     }
 
@@ -205,6 +217,14 @@ class MainActivity : AppCompatActivity() {
                 startService(stopIntent)
             } else {
                 val cfg = readConfigFromUi()
+                if (cfg.googleRelayEnabled && cfg.googleRelayAuthKey.isBlank()) {
+                    Toast.makeText(
+                        this,
+                        "أدخل AUTH_KEY المطابق للقيمة في Code.gs قبل تشغيل Google relay",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@setOnClickListener
+                }
                 ProxyConfig.save(this, cfg)
                 val startIntent = Intent(this, ProxyForegroundService::class.java).apply {
                     action = ProxyForegroundService.ACTION_START
@@ -261,6 +281,9 @@ class MainActivity : AppCompatActivity() {
         etAuth.isEnabled = enabled
         etBlacklist.isEnabled = enabled
         etUserAgent.isEnabled = enabled
+        switchGoogleRelay.isEnabled = enabled
+        etGoogleRelayUrl.isEnabled = enabled
+        etGoogleRelayAuthKey.isEnabled = enabled
     }
 
     private fun requestNotificationPermissionIfNeeded() {

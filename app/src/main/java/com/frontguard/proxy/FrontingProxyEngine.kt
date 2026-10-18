@@ -1,14 +1,24 @@
 package com.frontguard.proxy
 
+import android.util.Base64
+import org.json.JSONArray
+import org.json.JSONException
+import org.json.JSONObject
+import java.io.BufferedInputStream
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
+import java.io.SequenceInputStream
 import java.io.OutputStream
+import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URI
+import java.net.URL
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.concurrent.CountDownLatch
@@ -36,7 +46,17 @@ class FrontingProxyEngine(
 ) {
     companion object {
         private const val BUFFER_SIZE = 65536
+        private const val MAX_HTTP_HEADER_BYTES = 64 * 1024
+        private const val MAX_RELAY_REQUEST_BODY_BYTES = 16 * 1024 * 1024
+        private const val MAX_RELAY_RESPONSE_JSON_BYTES = 24 * 1024 * 1024
     }
+
+    private data class RelayHttpRequest(
+        val method: String,
+        val target: String,
+        val headers: LinkedHashMap<String, String>,
+        val body: ByteArray
+    )
 
     private val running = AtomicBoolean(false)
     private val activeConnections = AtomicInteger(0)
@@ -68,7 +88,8 @@ class FrontingProxyEngine(
                 LogBus.log(
                     "بدء الاستماع ${config.listenHost}:${config.listenPort} | " +
                             "fronts=${fronts.size} | mitm=${config.mitm} | " +
-                            "sni_mode=${config.sniMode} | insecure=${config.insecure}"
+                            "sni_mode=${config.sniMode} | insecure=${config.insecure} | " +
+                            "google_relay=${config.googleRelayEnabled}"
                 )
 
                 while (running.get()) {
@@ -307,6 +328,320 @@ class FrontingProxyEngine(
         return out.toByteArray()
     }
 
+    private fun readCompleteHttpRequest(input: InputStream, initial: ByteArray): RelayHttpRequest {
+        val stream = SequenceInputStream(ByteArrayInputStream(initial), BufferedInputStream(input))
+        val headerOut = ByteArrayOutputStream()
+        var tail = 0
+        var foundEnd = false
+        while (headerOut.size() < MAX_HTTP_HEADER_BYTES) {
+            val value = stream.read()
+            if (value < 0) break
+            headerOut.write(value)
+            tail = (tail shl 8 or value) and 0xFFFFFFFF.toInt()
+            if (tail == 0x0D0A0D0A) {
+                foundEnd = true
+                break
+            }
+        }
+        if (!foundEnd) throw IOException("HTTP header is incomplete or exceeds 64 KiB")
+
+        val headerBytes = headerOut.toByteArray()
+        val headerText = String(headerBytes, 0, headerBytes.size - 4, Charsets.ISO_8859_1)
+        val lines = headerText.split("\r\n")
+        val requestParts = lines.firstOrNull().orEmpty().trim().split(Regex("\\s+"))
+        if (requestParts.size < 2) throw IOException("Invalid HTTP request line")
+
+        val headers = LinkedHashMap<String, String>()
+        for (line in lines.drop(1)) {
+            val colon = line.indexOf(':')
+            if (colon <= 0) continue
+            val name = line.substring(0, colon).trim()
+            val value = line.substring(colon + 1).trim()
+            val existingKey = headers.keys.firstOrNull { it.equals(name, ignoreCase = true) }
+            if (existingKey == null) headers[name] = value
+            else headers[existingKey] = "${headers[existingKey]}, $value"
+        }
+
+        val transferEncoding = headers.entries
+            .firstOrNull { it.key.equals("transfer-encoding", ignoreCase = true) }
+            ?.value.orEmpty().lowercase()
+        val body = if (transferEncoding.split(',').any { it.trim() == "chunked" }) {
+            readChunkedBody(stream)
+        } else {
+            val contentLength = headers.entries
+                .firstOrNull { it.key.equals("content-length", ignoreCase = true) }
+                ?.value?.trim()?.toLongOrNull() ?: 0L
+            if (contentLength < 0 || contentLength > MAX_RELAY_REQUEST_BODY_BYTES) {
+                throw IOException("Request body exceeds the 16 MiB relay limit")
+            }
+            readExactly(stream, contentLength.toInt())
+        }
+
+        return RelayHttpRequest(requestParts[0].uppercase(), requestParts[1], headers, body)
+    }
+
+    private fun readExactly(input: InputStream, length: Int): ByteArray {
+        val result = ByteArray(length)
+        var offset = 0
+        while (offset < length) {
+            val count = input.read(result, offset, length - offset)
+            if (count < 0) throw IOException("Unexpected end of HTTP request body")
+            offset += count
+        }
+        return result
+    }
+
+    private fun readAsciiLine(input: InputStream, maxBytes: Int = 8192): String {
+        val line = ByteArrayOutputStream()
+        while (line.size() <= maxBytes) {
+            val value = input.read()
+            if (value < 0) throw IOException("Unexpected end of chunked request")
+            if (value == 10) break
+            if (value != 13) line.write(value)
+        }
+        if (line.size() > maxBytes) throw IOException("Chunk header is too long")
+        return String(line.toByteArray(), Charsets.ISO_8859_1)
+    }
+
+    private fun readChunkedBody(input: InputStream): ByteArray {
+        val body = ByteArrayOutputStream()
+        while (true) {
+            val line = readAsciiLine(input)
+            val chunkLength = line.substringBefore(';').trim().toLongOrNull(16)
+                ?: throw IOException("Invalid chunked request size")
+            if (chunkLength < 0 || chunkLength > MAX_RELAY_REQUEST_BODY_BYTES - body.size()) {
+                throw IOException("Chunked request body exceeds the 16 MiB relay limit")
+            }
+            if (chunkLength == 0L) {
+                while (readAsciiLine(input).isNotEmpty()) { /* consume trailers */ }
+                break
+            }
+            val chunk = readExactly(input, chunkLength.toInt())
+            body.write(chunk)
+            val cr = input.read()
+            val lf = input.read()
+            if (cr != 13 || lf != 10) throw IOException("Invalid chunk terminator")
+        }
+        return body.toByteArray()
+    }
+
+    private fun sendViaGoogleAppsScript(
+        request: RelayHttpRequest,
+        fallbackHost: String?,
+        fallbackScheme: String
+    ): ByteArray {
+        val authKey = config.googleRelayAuthKey
+        if (authKey.isBlank()) throw IOException("Enter the AUTH_KEY from Code.gs")
+
+        val endpoint = URL(config.googleRelayUrl.trim())
+        if (endpoint.protocol != "https") throw IOException("Apps Script endpoint must use HTTPS")
+        val targetUrl = resolveTargetUrl(request, fallbackHost, fallbackScheme)
+        val destinationHost = URI(targetUrl).host ?: throw IOException("Invalid target host")
+        if (isBlocked(destinationHost)) return httpErrorResponse(403, "Blocked by FrontGuard")
+        val requestHeaders = JSONObject()
+        var contentType = ""
+        val excluded = setOf(
+            "host", "connection", "keep-alive", "proxy-connection", "proxy-authorization",
+            "content-length", "transfer-encoding", "upgrade", "te", "trailer"
+        )
+        for ((name, value) in request.headers) {
+            val lower = name.lowercase()
+            if (lower == "content-type") contentType = value
+            if (lower == "user-agent" && config.userAgent.isNotBlank()) continue
+            if (lower in excluded || name.contains('\r') || name.contains('\n')) continue
+            requestHeaders.put(name, value)
+        }
+        if (config.userAgent.isNotBlank()) requestHeaders.put("User-Agent", config.userAgent.trim())
+        if (request.headers.keys.any { it.equals("upgrade", ignoreCase = true) }) {
+            throw IOException("WebSocket Upgrade cannot be relayed through Apps Script")
+        }
+
+        val payload = JSONObject()
+            .put("k", authKey)
+            .put("m", request.method)
+            .put("u", targetUrl)
+            .put("r", true)
+        if (requestHeaders.length() > 0) payload.put("h", requestHeaders)
+        if (request.body.isNotEmpty()) {
+            payload.put("b", Base64.encodeToString(request.body, Base64.NO_WRAP))
+            if (contentType.isNotBlank()) payload.put("ct", contentType)
+        }
+
+        val (status, responseText) = postAppsScriptJson(
+            endpoint,
+            payload.toString().toByteArray(Charsets.UTF_8)
+        )
+        if (status !in 200..299) {
+            throw IOException("Apps Script HTTP $status: ${responseText.take(180)}")
+        }
+        val envelope = parseRelayEnvelope(responseText)
+        val relayError = envelope.optString("e", "")
+        if (relayError.isNotBlank()) throw IOException("Apps Script rejected request: ${relayError.take(180)}")
+
+        val upstreamStatus = envelope.optInt("s", 200).coerceIn(100, 599)
+        val bodyText = envelope.optString("b", "")
+        val responseBody = if (bodyText.isEmpty()) byteArrayOf() else try {
+            Base64.decode(bodyText, Base64.DEFAULT)
+        } catch (e: IllegalArgumentException) {
+            throw IOException("Apps Script returned invalid base64 body")
+        }
+        val responseHeaders = envelope.optJSONObject("h") ?: JSONObject()
+        if (config.verbose) {
+            LogBus.log("Google Apps Script relay ${request.method} $destinationHost -> HTTP $upstreamStatus")
+        }
+        return buildHttpResponse(upstreamStatus, responseHeaders, responseBody)
+    }
+
+    private fun postAppsScriptJson(endpoint: URL, payload: ByteArray): Pair<Int, String> {
+        var currentUrl = endpoint
+        var method = "POST"
+
+        for (hop in 0..5) {
+            val connection = (currentUrl.openConnection() as HttpURLConnection).apply {
+                requestMethod = method
+                connectTimeout = config.timeoutSec * 1000
+                readTimeout = maxOf(config.timeoutSec * 1000, 60_000)
+                instanceFollowRedirects = false
+                useCaches = false
+                setRequestProperty("Accept", "application/json")
+                if (method == "POST") {
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                }
+            }
+            try {
+                if (method == "POST") {
+                    connection.outputStream.use { it.write(payload) }
+                }
+                val status = connection.responseCode
+                val location = connection.getHeaderField("Location")
+                if (status in 301..308 && !location.isNullOrBlank() && hop < 5) {
+                    val nextUrl = URL(currentUrl, location)
+                    val nextHost = nextUrl.host.lowercase()
+                    val sameHost = nextHost == endpoint.host.lowercase()
+                    val googleContentHost = nextHost == "googleusercontent.com" ||
+                        nextHost.endsWith(".googleusercontent.com")
+                    if (nextUrl.protocol != "https" || (!sameHost && !googleContentHost)) {
+                        throw IOException("Apps Script redirect host is not trusted")
+                    }
+                    if (status == 301 || status == 302 || status == 303) method = "GET"
+                    currentUrl = nextUrl
+                    continue
+                }
+                val responseStream = if (status in 200..399) connection.inputStream else connection.errorStream
+                val responseText = responseStream?.use {
+                    readTextLimited(it, MAX_RELAY_RESPONSE_JSON_BYTES)
+                }.orEmpty()
+                return status to responseText
+            } finally {
+                connection.disconnect()
+            }
+        }
+        throw IOException("Apps Script redirect limit exceeded")
+    }
+
+    private fun resolveTargetUrl(
+        request: RelayHttpRequest,
+        fallbackHost: String?,
+        fallbackScheme: String
+    ): String {
+        val target = request.target
+        val parsed = try { URI(target) } catch (_: Exception) { null }
+        if (parsed != null && parsed.isAbsolute) {
+            val scheme = parsed.scheme?.lowercase()
+            if (scheme != "http" && scheme != "https") throw IOException("Only HTTP(S) URLs can be relayed")
+            if (parsed.host.isNullOrBlank()) throw IOException("Invalid target URL")
+            return parsed.toASCIIString()
+        }
+        val host = request.headers.entries
+            .firstOrNull { it.key.equals("host", ignoreCase = true) }
+            ?.value?.trim()?.ifBlank { null } ?: fallbackHost?.trim()?.ifBlank { null }
+            ?: throw IOException("Missing target Host header")
+        val path = if (target.startsWith("/")) target else "/$target"
+        val url = "$fallbackScheme://$host$path"
+        val uri = try { URI(url) } catch (_: Exception) { throw IOException("Invalid target URL") }
+        if ((uri.scheme != "http" && uri.scheme != "https") || uri.host.isNullOrBlank()) {
+            throw IOException("Invalid target URL")
+        }
+        return uri.toASCIIString()
+    }
+
+    private fun parseRelayEnvelope(text: String): JSONObject {
+        val trimmed = text.trim()
+        try {
+            return JSONObject(trimmed)
+        } catch (_: JSONException) {
+            val start = trimmed.indexOf('{')
+            val end = trimmed.lastIndexOf('}')
+            if (start >= 0 && end > start) {
+                try { return JSONObject(trimmed.substring(start, end + 1)) }
+                catch (_: JSONException) { }
+            }
+            throw IOException("Apps Script returned non-JSON; check deployment and AUTH_KEY")
+        }
+    }
+
+    private fun readTextLimited(input: InputStream, maxBytes: Int): String {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            if (output.size() + count > maxBytes) throw IOException("Apps Script response exceeds the 24 MiB JSON limit")
+            output.write(buffer, 0, count)
+        }
+        return String(output.toByteArray(), Charsets.UTF_8)
+    }
+
+    private fun buildHttpResponse(status: Int, headers: JSONObject, body: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream(body.size + 1024)
+        out.write("HTTP/1.1 $status ${reasonPhrase(status)}\r\n".toByteArray(Charsets.ISO_8859_1))
+        val skip = setOf(
+            "connection", "keep-alive", "transfer-encoding", "content-length",
+            "proxy-authenticate", "proxy-authorization", "upgrade", "trailer"
+        )
+        val keys = headers.keys()
+        while (keys.hasNext()) {
+            val name = keys.next()
+            if (name.contains('\r') || name.contains('\n') || name.contains(':') || name.lowercase() in skip) continue
+            val value = headers.opt(name)
+            if (value == null || value == JSONObject.NULL) continue
+            if (value is JSONArray) {
+                for (i in 0 until value.length()) writeResponseHeader(out, name, value.optString(i))
+            } else {
+                writeResponseHeader(out, name, value.toString())
+            }
+        }
+        out.write("Content-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray(Charsets.ISO_8859_1))
+        out.write(body)
+        return out.toByteArray()
+    }
+
+    private fun writeResponseHeader(out: ByteArrayOutputStream, name: String, value: String) {
+        val safeValue = value.replace('\r', ' ').replace('\n', ' ')
+        out.write("$name: $safeValue\r\n".toByteArray(Charsets.ISO_8859_1))
+    }
+
+    private fun reasonPhrase(status: Int): String = when (status) {
+        200 -> "OK"; 201 -> "Created"; 202 -> "Accepted"; 204 -> "No Content"
+        206 -> "Partial Content"; 301 -> "Moved Permanently"; 302 -> "Found"
+        303 -> "See Other"; 304 -> "Not Modified"; 307 -> "Temporary Redirect"
+        308 -> "Permanent Redirect"; 400 -> "Bad Request"; 401 -> "Unauthorized"
+        403 -> "Forbidden"; 404 -> "Not Found"; 405 -> "Method Not Allowed"
+        408 -> "Request Timeout"; 413 -> "Payload Too Large"; 429 -> "Too Many Requests"
+        500 -> "Internal Server Error"; 501 -> "Not Implemented"; 502 -> "Bad Gateway"
+        503 -> "Service Unavailable"; 504 -> "Gateway Timeout"
+        else -> "Upstream Response"
+    }
+
+    private fun httpErrorResponse(status: Int, message: String): ByteArray {
+        val body = message.replace('\r', ' ').replace('\n', ' ').toByteArray(Charsets.UTF_8)
+        val head = "HTTP/1.1 $status ${reasonPhrase(status)}\r\n" +
+            "Content-Type: text/plain; charset=utf-8\r\n" +
+            "Content-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+        return head.toByteArray(Charsets.ISO_8859_1) + body
+    }
+
     private fun readInitialHttpPacket(input: InputStream): ByteArray? {
         val buf = ByteArray(BUFFER_SIZE)
         val n = input.read(buf)
@@ -347,6 +682,19 @@ class FrontingProxyEngine(
 
             if (method == "CONNECT") {
                 handleConnect(client, url)
+            } else if (config.googleRelayEnabled) {
+                try {
+                    val request = readCompleteHttpRequest(client.getInputStream(), data)
+                    val response = sendViaGoogleAppsScript(request, null, "http")
+                    client.getOutputStream().write(response)
+                    client.getOutputStream().flush()
+                } catch (e: Exception) {
+                    if (config.verbose) LogBus.log("Google relay HTTP: ${e.message}", "ERR")
+                    client.getOutputStream().write(httpErrorResponse(502, e.message ?: "Google relay failed"))
+                    client.getOutputStream().flush()
+                } finally {
+                    try { client.close() } catch (_: Exception) {}
+                }
             } else {
                 handleHttp(client, data, method, url)
             }
@@ -367,6 +715,17 @@ class FrontingProxyEngine(
             client.getOutputStream().write(
                 "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
             )
+            client.close()
+            return
+        }
+
+        if (config.googleRelayEnabled && (!config.mitm || targetPort != 443)) {
+            val reason = if (!config.mitm) {
+                "Google Apps Script relay requires MITM for HTTPS"
+            } else {
+                "Google Apps Script relay supports HTTPS CONNECT on port 443"
+            }
+            client.getOutputStream().write(httpErrorResponse(501, reason))
             client.close()
             return
         }
@@ -421,7 +780,7 @@ class FrontingProxyEngine(
     }
 
     private fun mitmConnect(client: Socket, targetHost: String) {
-        if (isIpAddress(targetHost)) {
+        if (isIpAddress(targetHost) && !config.googleRelayEnabled) {
             try {
                 InetAddress.getByName(targetHost)
                 rawConnect(client, targetHost, 443)
@@ -455,6 +814,22 @@ class FrontingProxyEngine(
         }
 
         try {
+            if (config.googleRelayEnabled) {
+                try {
+                    val request = readCompleteHttpRequest(browserTls.inputStream, byteArrayOf())
+                    val response = sendViaGoogleAppsScript(request, targetHost, "https")
+                    browserTls.outputStream.write(response)
+                    browserTls.outputStream.flush()
+                } catch (e: Exception) {
+                    if (config.verbose) LogBus.log("Google relay HTTPS ($targetHost): ${e.message}", "ERR")
+                    browserTls.outputStream.write(
+                        httpErrorResponse(502, e.message ?: "Google relay failed")
+                    )
+                    browserTls.outputStream.flush()
+                }
+                return
+            }
+
             val req = readInitialHttpPacket(browserTls.inputStream)
             if (req == null) {
                 browserTls.close()

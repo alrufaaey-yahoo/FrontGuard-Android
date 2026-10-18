@@ -137,7 +137,13 @@ class ProxyForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val modeText = if (config.mitm) "MITM (${config.sniMode})" else "RAW (${config.sniMode})"
+        val modeText = if (config.googleRelayEnabled) {
+            if (config.mitm) "Google Apps Script Relay + MITM" else "Google Apps Script Relay (HTTP only)"
+        } else if (config.mitm) {
+            "MITM (${config.sniMode})"
+        } else {
+            "RAW (${config.sniMode})"
+        }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_upload_done)
