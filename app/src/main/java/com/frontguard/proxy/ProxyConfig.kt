@@ -2,9 +2,6 @@ package com.frontguard.proxy
 
 import android.content.Context
 
-private const val DEFAULT_GOOGLE_RELAY_URL = "https://script.google.com/macros/s/AKfycbx-WPwe3qUZozQJxzDEF2DRs3hYiIGMcmoeTjS2hC_7CKcTbXBm2cbxV4KKuryypp5NwQ/exec"
-private const val DEFAULT_GOOGLE_RELAY_AUTH_KEY = "alrufaaey"
-
 data class ProxyConfig(
     val listenHost: String = "0.0.0.0",
     val listenPort: Int = 8080,
@@ -18,28 +15,13 @@ data class ProxyConfig(
     val retryCount: Int = 2,
     val auth: String = "",
     val blacklist: String = "",
-    val userAgent: String = "",
-    val googleRelayEnabled: Boolean = false,
-    val googleRelayUrl: String = DEFAULT_GOOGLE_RELAY_URL,
-    val googleRelayAuthKey: String = DEFAULT_GOOGLE_RELAY_AUTH_KEY,
-    val verifyRelayTls: Boolean = true
+    val userAgent: String = ""
 ) {
     fun frontList(): List<String> =
         fronts.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
     fun blacklistSet(): Set<String> =
         blacklist.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
-
-    fun validate(): String? {
-        if (listenPort !in 1..65535) return "منفذ الاستماع غير صحيح"
-        if (frontPort !in 1..65535) return "منفذ Front غير صحيح"
-        if (googleRelayEnabled) {
-            if (!googleRelayUrl.startsWith("https://")) return "رابط Apps Script يجب أن يبدأ بـ https://"
-            if (googleRelayAuthKey.isBlank()) return "أدخل AUTH_KEY المطابق لـ Code.gs"
-            if (!mitm) return "فعّل MITM لكي يعمل Relay مع HTTPS؛ HTTP سيظل يعمل بدونه"
-        }
-        return null
-    }
 
     companion object {
         private const val PREFS_NAME = "frontguard_prefs"
@@ -59,13 +41,7 @@ data class ProxyConfig(
                 retryCount = sp.getInt("retryCount", 2),
                 auth = sp.getString("auth", "") ?: "",
                 blacklist = sp.getString("blacklist", "") ?: "",
-                userAgent = sp.getString("userAgent", "") ?: "",
-                googleRelayEnabled = sp.getBoolean("googleRelayEnabled", false),
-                googleRelayUrl = sp.getString("googleRelayUrl", DEFAULT_GOOGLE_RELAY_URL)
-                    ?: DEFAULT_GOOGLE_RELAY_URL,
-                googleRelayAuthKey = sp.getString("googleRelayAuthKey", DEFAULT_GOOGLE_RELAY_AUTH_KEY)
-                    ?: DEFAULT_GOOGLE_RELAY_AUTH_KEY,
-                verifyRelayTls = sp.getBoolean("verifyRelayTls", true)
+                userAgent = sp.getString("userAgent", "") ?: ""
             )
         }
 
@@ -84,10 +60,6 @@ data class ProxyConfig(
                 putString("auth", cfg.auth)
                 putString("blacklist", cfg.blacklist)
                 putString("userAgent", cfg.userAgent)
-                putBoolean("googleRelayEnabled", cfg.googleRelayEnabled)
-                putString("googleRelayUrl", cfg.googleRelayUrl)
-                putString("googleRelayAuthKey", cfg.googleRelayAuthKey)
-                putBoolean("verifyRelayTls", cfg.verifyRelayTls)
                 apply()
             }
         }
