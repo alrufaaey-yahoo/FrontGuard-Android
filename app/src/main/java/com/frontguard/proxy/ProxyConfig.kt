@@ -6,6 +6,7 @@ private const val DEFAULT_GOOGLE_RELAY_URL = "https://script.google.com/macros/s
 private const val DEFAULT_GOOGLE_RELAY_AUTH_KEY = "alrufaaey"
 
 data class ProxyConfig(
+    val transportMode: String = MODE_FRONT,
     val listenHost: String = "0.0.0.0",
     val listenPort: Int = 8080,
     val fronts: String = "google.com",
@@ -24,6 +25,11 @@ data class ProxyConfig(
     val googleRelayAuthKey: String = DEFAULT_GOOGLE_RELAY_AUTH_KEY,
     val verifyRelayTls: Boolean = true
 ) {
+    companion object {
+        const val MODE_FRONT = "front"
+        const val MODE_RELAY = "relay"
+    }
+
     fun frontList(): List<String> =
         fronts.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -31,9 +37,13 @@ data class ProxyConfig(
         blacklist.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
 
     fun validate(): String? {
+        if (transportMode != MODE_FRONT && transportMode != MODE_RELAY) {
+            return "وضع التشغيل غير معروف"
+        }
         if (listenPort !in 1..65535) return "منفذ الاستماع غير صحيح"
-        if (frontPort !in 1..65535) return "منفذ Front غير صحيح"
-        if (googleRelayEnabled) {
+        if (transportMode == MODE_FRONT) {
+            if (frontPort !in 1..65535) return "منفذ Front غير صحيح"
+        } else {
             if (!googleRelayUrl.startsWith("https://")) return "رابط Apps Script يجب أن يبدأ بـ https://"
             if (googleRelayAuthKey.isBlank()) return "أدخل AUTH_KEY المطابق لـ Code.gs"
             if (!mitm) return "فعّل MITM لكي يعمل Relay مع HTTPS؛ HTTP سيظل يعمل بدونه"
@@ -46,7 +56,9 @@ data class ProxyConfig(
 
         fun load(context: Context): ProxyConfig {
             val sp = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val storedMode = sp.getString("transportMode", null)
             return ProxyConfig(
+                transportMode = storedMode ?: if (sp.getBoolean("googleRelayEnabled", false)) MODE_RELAY else MODE_FRONT,
                 listenHost = sp.getString("listenHost", "0.0.0.0") ?: "0.0.0.0",
                 listenPort = sp.getInt("listenPort", 8080),
                 fronts = sp.getString("fronts", "google.com") ?: "google.com",
@@ -71,6 +83,7 @@ data class ProxyConfig(
 
         fun save(context: Context, cfg: ProxyConfig) {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+                putString("transportMode", cfg.transportMode)
                 putString("listenHost", cfg.listenHost)
                 putInt("listenPort", cfg.listenPort)
                 putString("fronts", cfg.fronts)

@@ -58,6 +58,26 @@
                 android:textStyle="bold" />
 
             <Button
+                android:id="@+id/btnStartFront"
+                android:layout_width="wrap_content"
+                android:layout_height="54dp"
+                android:layout_marginStart="8dp"
+                android:backgroundTint="#0277BD"
+                android:text="تشغيل Front"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnStartRelay"
+                android:layout_width="wrap_content"
+                android:layout_height="54dp"
+                android:layout_marginStart="8dp"
+                android:backgroundTint="#00897B"
+                android:text="تشغيل Relay"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
+
+            <Button
                 android:id="@+id/btnExportCa"
                 android:layout_width="wrap_content"
                 android:layout_height="54dp"
@@ -266,6 +286,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:checked="false"
+                android:visibility="gone"
                 android:text="تمرير طلبات المواقع عبر Apps Script"
                 android:textColor="@color/text_primary" />
 
