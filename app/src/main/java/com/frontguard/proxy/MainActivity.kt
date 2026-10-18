@@ -1,4 +1,5 @@
 package com.frontguard.proxy
+import android.app.AlertDialog
 
 import android.Manifest
 import android.content.BroadcastReceiver
@@ -41,13 +42,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var switchVerbose: MaterialSwitch
     private lateinit var etTimeout: EditText
     private lateinit var etRetry: EditText
-    private lateinit var etAuth: EditText
-    private lateinit var etBlacklist: EditText
     private lateinit var etUserAgent: EditText
     private lateinit var tvLogs: TextView
     private lateinit var scrollLogs: ScrollView
     private lateinit var btnClearLogs: Button
     private lateinit var btnCopyLogs: Button
+    private lateinit var btnShowLogs: Button
+    private lateinit var logsPanel: View
 
     private val sniModes = arrayOf("front", "target", "auto")
 
@@ -60,7 +61,7 @@ class MainActivity : AppCompatActivity() {
 
     private val statusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            updateServiceUiState()
+            updateServiceUiState(intent?.getBooleanExtra("running", ProxyForegroundService.isServiceRunning))
         }
     }
 
@@ -86,6 +87,7 @@ class MainActivity : AppCompatActivity() {
 
         requestNotificationPermissionIfNeeded()
         bindViews()
+        logsPanel.visibility = View.GONE
         loadConfigIntoUi()
         setupListeners()
 
@@ -136,13 +138,13 @@ class MainActivity : AppCompatActivity() {
         switchVerbose = findViewById(R.id.switchVerbose)
         etTimeout = findViewById(R.id.etTimeout)
         etRetry = findViewById(R.id.etRetry)
-        etAuth = findViewById(R.id.etAuth)
-        etBlacklist = findViewById(R.id.etBlacklist)
         etUserAgent = findViewById(R.id.etUserAgent)
         tvLogs = findViewById(R.id.tvLogs)
         scrollLogs = findViewById(R.id.scrollLogs)
         btnClearLogs = findViewById(R.id.btnClearLogs)
         btnCopyLogs = findViewById(R.id.btnCopyLogs)
+        btnShowLogs = findViewById(R.id.btnShowLogs)
+        logsPanel = findViewById(R.id.logsPanel)
 
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, sniModes)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -165,8 +167,6 @@ class MainActivity : AppCompatActivity() {
 
         etTimeout.setText(cfg.timeoutSec.toString())
         etRetry.setText(cfg.retryCount.toString())
-        etAuth.setText(cfg.auth)
-        etBlacklist.setText(cfg.blacklist)
         etUserAgent.setText(cfg.userAgent)
     }
 
@@ -190,8 +190,6 @@ class MainActivity : AppCompatActivity() {
             verbose = switchVerbose.isChecked,
             timeoutSec = timeout,
             retryCount = retry,
-            auth = etAuth.text.toString().trim(),
-            blacklist = etBlacklist.text.toString().trim(),
             userAgent = etUserAgent.text.toString().trim()
         )
     }
@@ -227,10 +225,11 @@ class MainActivity : AppCompatActivity() {
             cm.setPrimaryClip(ClipData.newPlainText("FrontGuard Logs", tvLogs.text.toString()))
             Toast.makeText(this, "تم نسخ السجل إلى الحافظة", Toast.LENGTH_SHORT).show()
         }
+        btnShowLogs.setOnClickListener { showLogsDialog() }
     }
 
-    private fun updateServiceUiState() {
-        val running = ProxyForegroundService.isServiceRunning
+    private fun updateServiceUiState(reportedState: Boolean? = null) {
+        val running = reportedState ?: ProxyForegroundService.isServiceRunning
         if (running) {
             val cfg = ProxyConfig.load(this)
             tvStatusBadge.text = "متصل ويعمل في الخلفية (${cfg.listenHost}:${cfg.listenPort})"
@@ -258,9 +257,35 @@ class MainActivity : AppCompatActivity() {
         switchVerbose.isEnabled = enabled
         etTimeout.isEnabled = enabled
         etRetry.isEnabled = enabled
-        etAuth.isEnabled = enabled
-        etBlacklist.isEnabled = enabled
         etUserAgent.isEnabled = enabled
+    }
+
+    private fun showLogsDialog() {
+        val logView = TextView(this).apply {
+            setPadding(18, 12, 18, 12)
+            textSize = 11f
+            typeface = android.graphics.Typeface.MONOSPACE
+            textDirection = View.TEXT_DIRECTION_LTR
+            setTextColor(0xFF10B981.toInt())
+            text = LogBus.getHistory().joinToString("\n").ifBlank { "لا توجد سجلات بعد" }
+        }
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(0xFF090D16.toInt())
+            addView(logView)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("سجل العمليات المباشر")
+            .setView(scroll)
+            .setNeutralButton("نسخ") { _, _ ->
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("FrontGuard Logs", logView.text.toString()))
+            }
+            .setNegativeButton("مسح") { _, _ ->
+                LogBus.clear()
+                tvLogs.text = ""
+            }
+            .setPositiveButton("إغلاق", null)
+            .show()
     }
 
     private fun requestNotificationPermissionIfNeeded() {

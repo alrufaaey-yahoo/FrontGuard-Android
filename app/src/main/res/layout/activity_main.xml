@@ -66,6 +66,14 @@
                 android:text="تصدير CA"
                 android:textColor="#FFFFFF" />
         </LinearLayout>
+        <Button
+            android:id="@+id/btnShowLogs"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="8dp"
+            android:backgroundTint="#334155"
+            android:text="عرض سجل العمليات"
+            android:textColor="#FFFFFF" />
 
         <!-- بطاقة الإعدادات الأساسية -->
         <LinearLayout
@@ -248,7 +256,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="خيارات متقدمة (Timeout, Retry, Auth, Blacklist)"
+                android:text="خيارات متقدمة (Timeout, Retry)"
                 android:textColor="#38BDF8"
                 android:textStyle="bold" />
 
@@ -305,24 +313,6 @@
             </LinearLayout>
 
             <EditText
-                android:id="@+id/etAuth"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="مصادقة البروكسي (--auth اختياري)"
-                android:inputType="text"
-                android:textColor="@color/text_primary"
-                android:textColorHint="@color/text_secondary" />
-
-            <EditText
-                android:id="@+id/etBlacklist"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="القائمة السوداء (--blacklist نطاقات مفصولة بفاصلة)"
-                android:inputType="text"
-                android:textColor="@color/text_primary"
-                android:textColorHint="@color/text_secondary" />
-
-            <EditText
                 android:id="@+id/etUserAgent"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -334,11 +324,13 @@
 
         <!-- شاشة السجل المباشر -->
         <LinearLayout
+            android:id="@+id/logsPanel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:background="@color/bg_card"
             android:orientation="vertical"
+            android:visibility="gone"
             android:padding="12dp">
 
             <LinearLayout

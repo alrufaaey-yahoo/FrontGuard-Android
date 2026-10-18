@@ -245,24 +245,6 @@ class FrontingProxyEngine(
         }
     }
 
-    private fun isBlocked(host: String): Boolean {
-        val h = host.lowercase()
-        return config.blacklistSet().any { b -> h == b || h.endsWith(".$b") }
-    }
-
-    private fun checkAuth(requestBytes: ByteArray): Boolean {
-        val expected = config.auth.trim()
-        if (expected.isEmpty()) return true
-        val headerStr = String(requestBytes, Charsets.ISO_8859_1)
-        for (line in headerStr.split("\r\n")) {
-            if (line.lowercase().startsWith("proxy-authorization:")) {
-                val value = line.substringAfter(":").trim()
-                return value == expected || value == "Basic $expected"
-            }
-        }
-        return false
-    }
-
     private fun rewriteRequest(requestBytes: ByteArray, targetHost: String): ByteArray {
         val rawStr = String(requestBytes, Charsets.ISO_8859_1)
         val sepIndex = rawStr.indexOf("\r\n\r\n")
@@ -326,15 +308,6 @@ class FrontingProxyEngine(
                 return
             }
 
-            if (!checkAuth(data)) {
-                val resp = "HTTP/1.1 407 Proxy Authentication Required\r\n" +
-                        "Proxy-Authenticate: Basic realm=\"proxy\"\r\n" +
-                        "Content-Length: 0\r\n\r\n"
-                client.getOutputStream().write(resp.toByteArray(Charsets.ISO_8859_1))
-                client.close()
-                return
-            }
-
             val firstLine = String(data, Charsets.ISO_8859_1).substringBefore("\r\n")
             val parts = firstLine.split(" ")
             if (parts.size < 2) {
@@ -362,14 +335,6 @@ class FrontingProxyEngine(
         val hp = url.split(":")
         val targetHost = hp[0]
         val targetPort = if (hp.size > 1) hp[1].toIntOrNull() ?: 443 else 443
-
-        if (isBlocked(targetHost)) {
-            client.getOutputStream().write(
-                "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
-            )
-            client.close()
-            return
-        }
 
         if (config.mitm && targetPort == 443) {
             mitmConnect(client, targetHost)
@@ -515,14 +480,6 @@ class FrontingProxyEngine(
             }
             targetHost = hostLine.substringAfter(":").trim()
             path = url
-        }
-
-        if (isBlocked(targetHost)) {
-            client.getOutputStream().write(
-                "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
-            )
-            client.close()
-            return
         }
 
         val firstCrlf = rawStr.indexOf("\r\n")

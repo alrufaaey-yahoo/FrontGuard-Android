@@ -13,15 +13,10 @@ data class ProxyConfig(
     val verbose: Boolean = true,
     val timeoutSec: Int = 20,
     val retryCount: Int = 2,
-    val auth: String = "",
-    val blacklist: String = "",
     val userAgent: String = ""
 ) {
     fun frontList(): List<String> =
         fronts.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-
-    fun blacklistSet(): Set<String> =
-        blacklist.split(",").map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
 
     companion object {
         private const val PREFS_NAME = "frontguard_prefs"
@@ -39,8 +34,6 @@ data class ProxyConfig(
                 verbose = sp.getBoolean("verbose", true),
                 timeoutSec = sp.getInt("timeoutSec", 20),
                 retryCount = sp.getInt("retryCount", 2),
-                auth = sp.getString("auth", "") ?: "",
-                blacklist = sp.getString("blacklist", "") ?: "",
                 userAgent = sp.getString("userAgent", "") ?: ""
             )
         }
@@ -57,8 +50,6 @@ data class ProxyConfig(
                 putBoolean("verbose", cfg.verbose)
                 putInt("timeoutSec", cfg.timeoutSec)
                 putInt("retryCount", cfg.retryCount)
-                putString("auth", cfg.auth)
-                putString("blacklist", cfg.blacklist)
                 putString("userAgent", cfg.userAgent)
                 apply()
             }
