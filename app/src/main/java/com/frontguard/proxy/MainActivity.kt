@@ -1,7 +1,6 @@
 package com.frontguard.proxy
 
 import android.Manifest
-import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -45,16 +44,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etAuth: EditText
     private lateinit var etBlacklist: EditText
     private lateinit var etUserAgent: EditText
-    private lateinit var switchGoogleRelay: MaterialSwitch
-    private lateinit var switchVerifyRelayTls: MaterialSwitch
-    private lateinit var etGoogleRelayUrl: EditText
-    private lateinit var etGoogleRelayAuthKey: EditText
     private lateinit var tvLogs: TextView
     private lateinit var scrollLogs: ScrollView
     private lateinit var btnClearLogs: Button
     private lateinit var btnCopyLogs: Button
-    private lateinit var btnShowLogs: Button
-    private lateinit var logsPanel: View
 
     private val sniModes = arrayOf("front", "target", "auto")
 
@@ -93,7 +86,6 @@ class MainActivity : AppCompatActivity() {
 
         requestNotificationPermissionIfNeeded()
         bindViews()
-        logsPanel.visibility = View.GONE
         loadConfigIntoUi()
         setupListeners()
 
@@ -147,16 +139,10 @@ class MainActivity : AppCompatActivity() {
         etAuth = findViewById(R.id.etAuth)
         etBlacklist = findViewById(R.id.etBlacklist)
         etUserAgent = findViewById(R.id.etUserAgent)
-        switchGoogleRelay = findViewById(R.id.switchGoogleRelay)
-        switchVerifyRelayTls = findViewById(R.id.switchVerifyRelayTls)
-        etGoogleRelayUrl = findViewById(R.id.etGoogleRelayUrl)
-        etGoogleRelayAuthKey = findViewById(R.id.etGoogleRelayAuthKey)
         tvLogs = findViewById(R.id.tvLogs)
         scrollLogs = findViewById(R.id.scrollLogs)
         btnClearLogs = findViewById(R.id.btnClearLogs)
         btnCopyLogs = findViewById(R.id.btnCopyLogs)
-        btnShowLogs = findViewById(R.id.btnShowLogs)
-        logsPanel = findViewById(R.id.logsPanel)
 
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, sniModes)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -182,11 +168,6 @@ class MainActivity : AppCompatActivity() {
         etAuth.setText(cfg.auth)
         etBlacklist.setText(cfg.blacklist)
         etUserAgent.setText(cfg.userAgent)
-        switchGoogleRelay.isChecked = cfg.googleRelayEnabled
-        switchVerifyRelayTls.isChecked = cfg.verifyRelayTls
-        etGoogleRelayUrl.setText(cfg.googleRelayUrl)
-        etGoogleRelayAuthKey.setText(cfg.googleRelayAuthKey)
-        updateRelayModeUi(cfg.googleRelayEnabled)
     }
 
     private fun readConfigFromUi(): ProxyConfig {
@@ -211,42 +192,24 @@ class MainActivity : AppCompatActivity() {
             retryCount = retry,
             auth = etAuth.text.toString().trim(),
             blacklist = etBlacklist.text.toString().trim(),
-            userAgent = etUserAgent.text.toString().trim(),
-            googleRelayEnabled = switchGoogleRelay.isChecked,
-            googleRelayUrl = etGoogleRelayUrl.text.toString().trim(),
-            googleRelayAuthKey = etGoogleRelayAuthKey.text.toString(),
-            verifyRelayTls = switchVerifyRelayTls.isChecked
+            userAgent = etUserAgent.text.toString().trim()
         )
     }
 
     private fun setupListeners() {
-        switchGoogleRelay.setOnCheckedChangeListener { _, enabled ->
-            updateRelayModeUi(enabled)
-        }
         btnToggleProxy.setOnClickListener {
             if (ProxyForegroundService.isServiceRunning) {
                 val stopIntent = Intent(this, ProxyForegroundService::class.java).apply {
                     action = ProxyForegroundService.ACTION_STOP
                 }
                 startService(stopIntent)
-                updateServiceUiState()
             } else {
                 val cfg = readConfigFromUi()
-                val validationError = cfg.validate()
-                if (validationError != null) {
-                    Toast.makeText(
-                        this,
-                        validationError,
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@setOnClickListener
-                }
                 ProxyConfig.save(this, cfg)
                 val startIntent = Intent(this, ProxyForegroundService::class.java).apply {
                     action = ProxyForegroundService.ACTION_START
                 }
                 ContextCompat.startForegroundService(this, startIntent)
-                updateServiceUiState()
             }
         }
 
@@ -264,41 +227,6 @@ class MainActivity : AppCompatActivity() {
             cm.setPrimaryClip(ClipData.newPlainText("FrontGuard Logs", tvLogs.text.toString()))
             Toast.makeText(this, "تم نسخ السجل إلى الحافظة", Toast.LENGTH_SHORT).show()
         }
-        btnShowLogs.setOnClickListener { showLogsDialog() }
-    }
-
-    private fun updateRelayModeUi(relayEnabled: Boolean) {
-        // Independent Relay never reads Front/SNI settings. MITM remains
-        // enabled because HTTPS browser requests still need termination.
-        etFronts.isEnabled = !relayEnabled
-        etFrontPort.isEnabled = !relayEnabled
-        spinnerSniMode.isEnabled = !relayEnabled
-        switchInsecure.isEnabled = !relayEnabled
-    }
-
-    private fun showLogsDialog() {
-        val logView = TextView(this).apply {
-            setPadding(18, 12, 18, 12)
-            textSize = 11f
-            typeface = android.graphics.Typeface.MONOSPACE
-            textDirection = View.TEXT_DIRECTION_LTR
-            setTextColor(0xFF10B981.toInt())
-            text = LogBus.getHistory().joinToString("\n").ifBlank { "لا توجد سجلات بعد" }
-        }
-        val scroll = ScrollView(this).apply {
-            setBackgroundColor(0xFF090D16.toInt())
-            addView(logView)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("سجل FrontGuard")
-            .setView(scroll)
-            .setNeutralButton("نسخ") { _, _ ->
-                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("FrontGuard Logs", logView.text.toString()))
-            }
-            .setNegativeButton("مسح") { _, _ -> LogBus.clear(); tvLogs.text = "" }
-            .setPositiveButton("إغلاق", null)
-            .show()
     }
 
     private fun updateServiceUiState() {
@@ -333,11 +261,6 @@ class MainActivity : AppCompatActivity() {
         etAuth.isEnabled = enabled
         etBlacklist.isEnabled = enabled
         etUserAgent.isEnabled = enabled
-        switchGoogleRelay.isEnabled = enabled
-        switchVerifyRelayTls.isEnabled = enabled
-        etGoogleRelayUrl.isEnabled = enabled
-        etGoogleRelayAuthKey.isEnabled = enabled
-        if (enabled) updateRelayModeUi(switchGoogleRelay.isChecked)
     }
 
     private fun requestNotificationPermissionIfNeeded() {

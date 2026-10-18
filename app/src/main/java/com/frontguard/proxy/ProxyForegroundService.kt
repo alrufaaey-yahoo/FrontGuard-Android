@@ -51,42 +51,21 @@ class ProxyForegroundService : Service() {
         createNotificationChannel()
         val config = ProxyConfig.load(this)
 
-        config.validate()?.let {
-            LogBus.log(it, "ERR")
-            isServiceRunning = false
-            sendStatusBroadcast(false)
-            stopSelf()
-            return
-        }
-
         acquireWakeLock()
 
         val notification = buildNotification(config, 0)
         startForeground(NOTIF_ID, notification)
 
         currentEngine?.stop()
-        val engine = FrontingProxyEngine(
-            config,
-            filesDir,
-            onStatsChanged = { activeCount ->
-                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                nm.notify(NOTIF_ID, buildNotification(config, activeCount))
-            },
-            onRunningChanged = { running ->
-                isServiceRunning = running
-                sendStatusBroadcast(running)
-                if (!running) {
-                    releaseWakeLock()
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                }
-            }
-        )
+        val engine = FrontingProxyEngine(config, filesDir) { activeCount ->
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.notify(NOTIF_ID, buildNotification(config, activeCount))
+        }
         currentEngine = engine
         engine.start()
 
         isServiceRunning = true
-        sendStatusBroadcast(true)
+        sendBroadcast(Intent(ACTION_STATUS_BROADCAST))
     }
 
     private fun stopProxyService() {
@@ -94,7 +73,7 @@ class ProxyForegroundService : Service() {
         currentEngine = null
         isServiceRunning = false
         releaseWakeLock()
-        sendStatusBroadcast(false)
+        sendBroadcast(Intent(ACTION_STATUS_BROADCAST))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -104,16 +83,8 @@ class ProxyForegroundService : Service() {
         currentEngine = null
         isServiceRunning = false
         releaseWakeLock()
-        sendStatusBroadcast(false)
+        sendBroadcast(Intent(ACTION_STATUS_BROADCAST))
         super.onDestroy()
-    }
-
-    private fun sendStatusBroadcast(running: Boolean) {
-        sendBroadcast(
-            Intent(ACTION_STATUS_BROADCAST)
-                .setPackage(packageName)
-                .putExtra("running", running)
-        )
     }
 
     private fun acquireWakeLock() {
@@ -166,13 +137,7 @@ class ProxyForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val modeText = if (config.googleRelayEnabled) {
-            if (config.mitm) "Google Apps Script Relay + MITM" else "Google Apps Script Relay (HTTP only)"
-        } else if (config.mitm) {
-            "MITM (${config.sniMode})"
-        } else {
-            "RAW (${config.sniMode})"
-        }
+        val modeText = if (config.mitm) "MITM (${config.sniMode})" else "RAW (${config.sniMode})"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_upload_done)

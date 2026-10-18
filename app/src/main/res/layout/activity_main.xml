@@ -25,7 +25,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:text="واجهة منفصلة لـ Front وGoogle Apps Script Relay"
+            android:text="CF/Google Fronting Proxy — متوافق مع OpenSSL 3.x (SKI/AKI)"
             android:textColor="@color/text_secondary"
             android:textSize="13sp" />
 
@@ -66,15 +66,6 @@
                 android:text="تصدير CA"
                 android:textColor="#FFFFFF" />
         </LinearLayout>
-
-        <Button
-            android:id="@+id/btnShowLogs"
-            android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:layout_marginTop="8dp"
-            android:backgroundTint="#334155"
-            android:text="عرض سجل العمليات"
-            android:textColor="#FFFFFF" />
 
         <!-- بطاقة الإعدادات الأساسية -->
         <LinearLayout
@@ -245,76 +236,6 @@
                 android:textColor="@color/text_primary" />
         </LinearLayout>
 
-        <!-- خيار Google Apps Script Relay الإضافي -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:background="@color/bg_card"
-            android:orientation="vertical"
-            android:padding="14dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Google Apps Script Relay — وضع مستقل"
-                android:textColor="#38BDF8"
-                android:textStyle="bold" />
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/switchGoogleRelay"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:checked="false"
-                android:text="تمرير طلبات المواقع عبر Apps Script"
-                android:textColor="@color/text_primary" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="وضع مستقل: هذا المسار لا يستخدم Front أو SNI. يلزم MITM وتثبيت CA لفك HTTPS بين المتصفح والتطبيق فقط؛ WebSocket والتطبيقات ذات تثبيت الشهادة غير مدعومة."
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
-
-            <EditText
-                android:id="@+id/etGoogleRelayUrl"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:hint="رابط نشر Apps Script /exec"
-                android:inputType="textUri"
-                android:singleLine="true"
-                android:text="https://script.google.com/macros/s/AKfycbx-WPwe3qUZozQJxzDEF2DRs3hYiIGMcmoeTjS2hC_7CKcTbXBm2cbxV4KKuryypp5NwQ/exec"
-                android:textColor="@color/text_primary"
-                android:textColorHint="@color/text_secondary" />
-
-            <EditText
-                android:id="@+id/etGoogleRelayAuthKey"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="AUTH_KEY نفسه الموجود في Code.gs"
-                android:inputType="textPassword"
-                android:singleLine="true"
-                android:textColor="@color/text_primary"
-                android:textColorHint="@color/text_secondary" />
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/switchVerifyRelayTls"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:checked="true"
-                android:text="Verify upstream TLS — تحقق من شهادة Google للـRelay"
-                android:textColor="@color/text_primary" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="هذا الخيار خاص باتصال Relay فقط ولا يغيّر Front أو شهادة MITM. أوقفه للتشخيص فقط."
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
-        </LinearLayout>
-
         <!-- بطاقة الخيارات المتقدمة -->
         <LinearLayout
             android:layout_width="match_parent"
@@ -413,7 +334,6 @@
 
         <!-- شاشة السجل المباشر -->
         <LinearLayout
-            android:id="@+id/logsPanel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
